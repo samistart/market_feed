@@ -4,7 +4,10 @@
 #include <map>
 #include <unordered_map>
 #include <cassert>
+#include <sstream>
 #include <chrono>
+#include <limits>
+#include <cmath>
 
 class OrderBook{
 public:
@@ -16,7 +19,6 @@ public:
         if(!res.second){
             ++res.first->second;
         }
-        getHighestPrice();
     }
     void erase(uint32_t id)
     {
@@ -32,61 +34,48 @@ public:
         }
         mIdToIterator.erase(id);
     }
-    uint32_t getHighestPrice()
+    double getHighestPrice()
     {
-        auto it = mPriceToCount.rbegin();
-        return it->first;
-    }
-    bool empty()
-    {
-        return mPriceToCount.empty();
+        if(!mPriceToCount.empty()){
+            return mPriceToCount.rbegin()->first;
+        }
+        else
+        {
+            return std::numeric_limits<double>::quiet_NaN();
+        }
     }
 private:
-    std::map<uint32_t,uint32_t> mPriceToCount;
-    std::unordered_map<uint32_t, std::map<uint32_t,uint32_t>::iterator> mIdToIterator;
+    std::map<double,uint32_t> mPriceToCount;
+    std::unordered_map<uint32_t, decltype(mPriceToCount)::iterator> mIdToIterator;
 };
 
 
 char getOrderType(const std::string& line)
 {
-    char orderType;
     std::size_t found = line.find_first_of(" ");
-    if (found!=std::string::npos)
-    {
-      orderType = line[found + 1];
-    }
-    return orderType;
+    return line[found + 1];
 }
 
 double getPrice(const std::string& line)
 {
-    double price;
     std::size_t found = line.find_last_of(" ");
-    price = std::stod(line.substr(found + 1));
-    return price;
+    return std::stod(line.substr(found + 1));
 }
 
 uint32_t getId(const std::string& line)
 {
-    uint32_t id;
     std::size_t start = line.find_first_of("IE");
     std::size_t end = line.find_last_of(" ");
     start = start + 2;
     auto length = end - start;
-    id = std::stoi(line.substr(start, length), nullptr);
-    return id;
+    return std::stoi(line.substr(start, length), nullptr);
 }
 
 uint32_t getTimeStamp(const std::string& line)
 {
-    uint32_t timeStamp;
     std::size_t found = line.find_first_of(" ");
-    if (found!=std::string::npos)
-    {
-        std::string tString = line.substr(0, found);
-        timeStamp = std::stoi(tString, nullptr);
-    }
-    return timeStamp;
+    std::string tString = line.substr(0, found);
+    return std::stoi(tString, nullptr);
 }
 
 void processOrder(const std::string& line, OrderBook& orderBook)
@@ -94,8 +83,7 @@ void processOrder(const std::string& line, OrderBook& orderBook)
     char orderType = getOrderType(line);
     if(orderType == 'I')
     {
-         orderBook.insert(getId(line),
-                          getPrice(line));
+         orderBook.insert(getId(line), getPrice(line));
     }
     else if (orderType == 'E')
     {
@@ -108,39 +96,45 @@ int main(int argc, char** argv)
     using std::chrono::steady_clock;
     auto start = steady_clock::now();
     assert(argc == 2  && "Takes a single command line argument of the file name.");
-    std::ifstream marketData;
-    marketData.open(argv[1]);
+    std::ifstream marketData(argv[1]);
+    std::stringstream buffer;
+    if ( marketData )
+    {
+        buffer << marketData.rdbuf();
+        marketData.close();
+    }
     std::string line;
     OrderBook orderBook;
     uint32_t prev;
-    uint32_t time;
+    uint32_t t;
     uint32_t elapsed = 0;
     double weightedHighestPriceSum = 0;
-    if(std::getline(marketData, line))
+    if(std::getline(buffer, line))
     {
         prev = getTimeStamp(line);
         do
         {
-            time = getTimeStamp(line);
-            auto timeSegment = time - prev;
-            if(!orderBook.empty())
+            t = getTimeStamp(line);
+            auto timeSegment = t - prev;
+            volatile double highestPrice = orderBook.getHighestPrice();
+            if(!std::isnan(highestPrice))
             {
                 elapsed += timeSegment;
                 weightedHighestPriceSum += orderBook.getHighestPrice() * timeSegment;
             }
             processOrder(line, orderBook);
-            prev = time;
-        } while(std::getline(marketData, line));
+            prev = t;
+        } while(std::getline(buffer, line));
     }
     if(elapsed > 0){
-        std::cout << weightedHighestPriceSum / elapsed << std::endl;
+        std::cout << weightedHighestPriceSum / elapsed << "\n";
     }
     else
     {
-        std::cout << 0 << std::endl;
+        std::cout << "No orders found in market." << "\n";
     }
     auto end = steady_clock::now();
     double elapsedSeconds = ((end - start).count()) * steady_clock::period::num / static_cast<double>(steady_clock::period::den);
-    std::cout << elapsedSeconds << "s taken." << std::endl;
+    std::cout << elapsedSeconds << "s taken." << "\n";
     return 0;
 }
