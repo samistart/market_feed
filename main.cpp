@@ -4,10 +4,11 @@
 #include <map>
 #include <unordered_map>
 #include <cassert>
+#include <chrono>
 
 class OrderBook{
 public:
-    void insert(uint32_t&& id, double&& price)
+    void insert(uint32_t id, double price)
     {
         auto res = mPriceToCount.emplace(std::make_pair(price, 1));
         auto it = res.first;
@@ -17,14 +18,13 @@ public:
         }
         getHighestPrice();
     }
-    void erase(uint32_t&& id)
+    void erase(uint32_t id)
     {
-        std::map<uint32_t,uint32_t>::iterator it = mIdToIterator[id];
-        auto price = it->first;
-        auto count = it->second;
+        auto it = mIdToIterator[id];
+        auto& count = it->second;
         if(count > 1)
         {
-            --it->second;
+            --count;
         }
         else
         {
@@ -62,10 +62,7 @@ double getPrice(const std::string& line)
 {
     double price;
     std::size_t found = line.find_last_of(" ");
-    if (found!=std::string::npos)
-    {
-        price = std::stod(line.substr(found + 1));
-    }
+    price = std::stod(line.substr(found + 1));
     return price;
 }
 
@@ -74,12 +71,9 @@ uint32_t getId(const std::string& line)
     uint32_t id;
     std::size_t start = line.find_first_of("IE");
     std::size_t end = line.find_last_of(" ");
-    if (start!=std::string::npos & end!=std::string::npos)
-    {
-        start = start + 2;
-        auto length = end - start;
-        id = std::stoi(line.substr(start, length), nullptr);
-    }
+    start = start + 2;
+    auto length = end - start;
+    id = std::stoi(line.substr(start, length), nullptr);
     return id;
 }
 
@@ -111,6 +105,8 @@ void processOrder(const std::string& line, OrderBook& orderBook)
 
 int main(int argc, char** argv)
 {
+    using std::chrono::steady_clock;
+    auto start = steady_clock::now();
     assert(argc == 2  && "Takes a single command line argument of the file name.");
     std::ifstream marketData;
     marketData.open(argv[1]);
@@ -143,5 +139,8 @@ int main(int argc, char** argv)
     {
         std::cout << 0 << std::endl;
     }
+    auto end = steady_clock::now();
+    double elapsedSeconds = ((end - start).count()) * steady_clock::period::num / static_cast<double>(steady_clock::period::den);
+    std::cout << elapsedSeconds << "s taken." << std::endl;
     return 0;
 }
