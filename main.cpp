@@ -111,7 +111,7 @@ void processOrder(const std::string& line, OrderBook& orderBook)
 
 int main(int argc, char** argv)
 {
-    assert(argc == 2);
+    assert(argc == 2  && "Takes a single command line argument of the file name.");
     std::ifstream marketData;
     marketData.open(argv[1]);
     std::string line;
